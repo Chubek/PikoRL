@@ -2,22 +2,23 @@ PROJECT_NAME           = "PikoRL"
 PROJECT_NUMBER         = @PACKAGE_VERSION@
 OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/docs
 
-INPUT                  = @CMAKE_CURRENT_SOURCE_DIR@ \
+INPUT                  = @PACKAGE_SOURCE_DIR@/PikoRL.hpp \
+                         @PACKAGE_SOURCE_DIR@/qamrpp-lpikorl \
+                         @CMAKE_CURRENT_SOURCE_DIR@/FrontPage.md \
                          @CMAKE_CURRENT_SOURCE_DIR@/manual
 
 FILE_PATTERNS          = *.h *.c *.cpp *.rst *.md
 RECURSIVE              = YES
 
-# Use FrontPage.rst as the main page
-USE_MDFILE_AS_MAINPAGE = FrontPage.rst
+# Use FrontPage.md as the main page
+USE_MDFILE_AS_MAINPAGE = @CMAKE_CURRENT_SOURCE_DIR@/FrontPage.md
 
-# Enable Markdown/RST-like docs
+# Enable Markdown docs
 MARKDOWN_SUPPORT       = YES
-EXTENSION_MAPPING      = rst=Markdown
 
 GENERATE_HTML          = YES
 GENERATE_LATEX         = YES
-GENERATE_XML	       = YES
+GENERATE_XML           = YES
 GENERATE_DOCBOOK       = YES
 
 QUIET                  = YES
@@ -36,6 +37,4 @@ INLINE_SOURCES         = NO
 # Graphs
 HAVE_DOT               = @PACKAGE_HAS_DOT@
 CALL_GRAPH             = @PACKAGE_HAS_GRAPH@
-CALLER_GRAPH           = @PACKAGE_CLLAER_GRAPH@
-
-
+CALLER_GRAPH           = @PACKAGE_CALLER_GRAPH@

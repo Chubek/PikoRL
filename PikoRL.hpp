@@ -2,6 +2,9 @@
 #define PICORL_HPP
 
 #include "QaMRpp/QaMRpp.hpp"
+#include "third_party/SerdeTk/SerdeTk.hpp"
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -14,13 +17,15 @@ namespace picorl
 class PicoRLExtension : public qamrpp::Extension
 {
 public:
+  const char *
+  name () const override
+  {
+    return "PikoRL";
+  }
+
   void
   register_functions (qamrpp::Context &ctx) override
   {
-    // Registering PicoRL core namespaces as a table conceptually,
-    // or registering flat functions that populate 'lpicorl' table in Lua.
-
-    // 1. Prompt keys (lpicorl.prompt)
     ctx.register_native (
         "lpicorl_prompt",
         [] (qamrpp::Context &c, std::vector<qamrpp::ValuePtr> &args)
@@ -35,25 +40,13 @@ public:
             return val;
           });
 
-    // 2. Syntax highlighting (lpicorl.syntax)
-    ctx.register_native (
-        "lpicorl_syntax",
-        [] (qamrpp::Context &c, std::vector<qamrpp::ValuePtr> &args)
-          {
-            // Stub for syntax highlighting integration
-            return std::make_shared<qamrpp::Value> ();
-          });
-
-    // 3. Directive commands (lpicorl.directive)
     ctx.register_native (
         "lpicorl_directive",
         [] (qamrpp::Context &c, std::vector<qamrpp::ValuePtr> &args)
           {
-            // Stub for REPL directives (e.g., %load, %clear)
             return std::make_shared<qamrpp::Value> ();
           });
 
-    // 4. Shared library plugins (lpicorl.plugin)
     ctx.register_native (
         "lpicorl_plugin",
         [] (qamrpp::Context &c, std::vector<qamrpp::ValuePtr> &args)
@@ -68,10 +61,6 @@ public:
               }
             return std::make_shared<qamrpp::Value> ();
           });
-
-    // Other stubs for menus, web, sandboxing, IDL, themes, macros...
-    // lpicorl.page, lpicorl.menue, lpicorl.web, lpicorl.sandboxing
-    // lpicorl.idl, lpicorl.them, lpicorl.colors, lpicorl.macros
   }
 };
 
@@ -98,10 +87,28 @@ public:
     ctx.add_extension (std::make_unique<PicoRLExtension> ());
 
     // Bootstrap the lpicorl table in Lua space
-    // (Assuming a simple script to map the natives to the lpicorl table)
-    // ctx.execute("lpicorl = { prompt = lpicorl_prompt, plugin =
-    // lpicorl_plugin, syntax = lpicorl_syntax, directive = lpicorl_directive
-    // }");
+    ctx.run (
+        "local function __lpikorl_nil() return nil end "
+        "lpicorl = {"
+        " prompt = lpicorl_prompt or __lpikorl_nil,"
+        " plugin = lpicorl_plugin,"
+        " syntax = lpicorl_syntax or __lpikorl_nil,"
+        " directive = lpicorl_directive or __lpikorl_nil,"
+        " completion = lpicorl_completion or __lpikorl_nil,"
+        " help = lpicorl_help or __lpikorl_nil,"
+        " history = lpicorl_history or __lpikorl_nil,"
+        " menu = lpicorl_menu or __lpikorl_nil,"
+        " page = lpicorl_page or __lpikorl_nil,"
+        " idl = lpicorl_idl or __lpikorl_nil,"
+        " theme = lpicorl_theme or __lpikorl_nil,"
+        " colors = lpicorl_colors or __lpikorl_nil,"
+        " macros = lpicorl_macros or __lpikorl_nil,"
+        " web = lpicorl_web or __lpikorl_nil,"
+        " sandboxing = lpicorl_sandboxing or __lpikorl_nil"
+        " }");
+
+    (void)load_example_bundle ("examples/PythonRL");
+    (void)load_example_bundle ("examples/RubyRL");
   }
 
   void
@@ -113,12 +120,33 @@ public:
 
     while (is_running)
       {
-        // Use the lpicorl prompt natively or via lua script
-        std::cout << "PicoRL> " << std::flush;
         std::string input;
-        if (!std::getline (std::cin, input))
+        bool got_line = false;
+
+        try
           {
-            break;
+            auto prompt_result
+                = ctx.run ("if lpicorl and lpicorl.prompt "
+                           "then return lpicorl.prompt('PicoRL> ') "
+                           "end return nil");
+            if (prompt_result
+                && prompt_result->type == qamrpp::Value::Type::STRING)
+              {
+                input = prompt_result->string_value;
+                got_line = true;
+              }
+          }
+        catch (const std::exception &)
+          {
+          }
+
+        if (!got_line)
+          {
+            std::cout << "PicoRL> " << std::flush;
+            if (!std::getline (std::cin, input))
+              {
+                break;
+              }
           }
 
         if (input == "exit" || input == "quit")
@@ -129,14 +157,97 @@ public:
 
         try
           {
-            // Here we would parse and execute `input` using QaMRpp's execution
-            // interface e.g., ctx.execute(input);
+            ctx.run (input);
           }
         catch (const std::exception &e)
           {
             std::cerr << "Error: " << e.what () << "\n";
           }
       }
+  }
+
+  bool
+  load_example_bundle (const std::string &bundle_dir)
+  {
+    namespace fs = std::filesystem;
+    const fs::path base (bundle_dir);
+    const fs::path manifest = base / "MANIFEST.json";
+    if (!fs::exists (manifest))
+      {
+        return false;
+      }
+
+    try
+      {
+        serdetk::register_builtin_formats ();
+        const auto doc = serdetk::builtins::json ().load_file (manifest);
+        if (!doc.root.is_object ())
+          {
+            return false;
+          }
+
+        const auto &root = doc.root.as_object ();
+        auto run_file = [&] (const std::string &relpath) -> bool
+        {
+          const fs::path full = base / relpath;
+          if (!fs::exists (full))
+            {
+              return false;
+            }
+          std::ifstream in (full);
+          if (!in)
+            {
+              return false;
+            }
+          std::string source ((std::istreambuf_iterator<char> (in)),
+                              std::istreambuf_iterator<char> ());
+          ctx.run (source);
+          return true;
+        };
+
+        if (root.contains ("lua"))
+          {
+            const auto &lua_list = root.at ("lua");
+            if (lua_list.is_array ())
+              {
+                for (const auto &entry : lua_list.as_array ().items)
+                  {
+                    if (entry.is_string ())
+                      {
+                        (void)run_file (entry.as_string ());
+                      }
+                    else if (entry.is_object ())
+                      {
+                        const auto &obj = entry.as_object ();
+                        bool required = false;
+                        if (obj.contains ("required")
+                            && obj.at ("required").is_bool ())
+                          {
+                            required = std::get<bool> (
+                                obj.at ("required").data);
+                          }
+
+                        if (obj.contains ("path")
+                            && obj.at ("path").is_string ())
+                          {
+                            const bool loaded
+                                = run_file (obj.at ("path").as_string ());
+                            if (!loaded && required)
+                              {
+                                return false;
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+      }
+    catch (const std::exception &)
+      {
+        return false;
+      }
+
+    return true;
   }
 
   // Allow host language to inject its own APIs/Globals into the REPL
