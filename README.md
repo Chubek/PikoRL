@@ -18,3 +18,51 @@ Like an oroboros, QaMRpp itself uses PicoRL as its shall!!
 - Color Sscheems an themes (`lpicorl.them`, `lpicorl.colors`)
 - Automation/Recordingg (`lpicorl.macros`)
 
+## Bundle CLI (`pikorl-cli`)
+
+PikoRL provides a small bundle scaffolder executable:
+
+```bash
+pikorl-cli [--stub path/to/stub.sh] <bundle-dir>
+```
+
+Example:
+
+```bash
+pikorl-cli foo
+```
+
+Creates:
+
+- `colors.lua`
+- `history.lua`
+- `macros.lua`
+- `MANIFEST.json`
+- `syntax.lua`
+- `theme.lua`
+- `web.lua`
+- `package.sh`
+- `entrypoint.sh`
+- `code/`
+- `static/`
+
+### Runnable archive packaging
+
+Inside the bundle directory:
+
+```bash
+./package.sh [output-name]
+```
+
+This creates an executable archive by concatenating:
+
+1. A shebang stub (`.pikorl_stub.sh`), and
+2. A tar payload containing bundle files.
+
+At runtime, the stub extracts the payload to a temporary directory and runs:
+
+- `entrypoint.sh`, or
+- `entrypoint.py`, or
+- the first file matching `entrypoint*`.
+
+Use `--stub` during scaffold creation to provide a custom runtime stub.
